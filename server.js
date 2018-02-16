@@ -2,6 +2,9 @@ const azure = require("azure");
 const randomstring = require("randomstring");
 const Latency = require("./lib/Latency.js");
 const tedious = require("tedious");
+const express = require("express");
+
+const app = express();
 
 const scenario = "appsrv/container";
 
@@ -82,10 +85,10 @@ function create() {
 
 }
 
-create().then(_ => {
+// provide a space to record times
+let latency = new Latency();
 
-    // provide a space to record times
-    let latency = new Latency();
+create().then(_ => {
 
     // generate 10 messages per second
     setInterval(_ => {
@@ -132,8 +135,17 @@ create().then(_ => {
             console.log(`bucket ${bucket.range}, success: ${bucket.count}, fails: ${bucket.fails}, min: ${bucket.min}ms, max: ${bucket.max}ms, avg: ${bucket.avg}ms`);
         }
         latency = new Latency();
-    }, 60000 * 5); // every 5 minutes
+    }, 60000 * 15); // every 15 minutes
 
 }).catch(err => {
     console.error(err);
+});
+
+app.get("/latency", (req, res) => {
+    const buckets = latency.calc();
+    res.send(buckets);
+});
+
+app.listen(8000, _ => {
+    console.log(`listening on port 8000...`);
 });
