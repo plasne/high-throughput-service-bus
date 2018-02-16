@@ -7,7 +7,7 @@ const express = require("express");
 const app = express();
 
 const scenario = "appsrv/container";
-const port = 80;
+const port = process.env.PORT || 8000;
 
 const retryOperations = new azure.ExponentialRetryPolicyFilter();
 const service = azure.createServiceBusService("Endpoint=sb://pelasne-servicebus.servicebus.windows.net/;SharedAccessKeyName=RootManageSharedAccessKey;SharedAccessKey=Un2Efi+ANsVtznBuVS5mqAj9MJs9JfM0uHBoL7S5v3M=").withFilter(retryOperations);
