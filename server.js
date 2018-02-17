@@ -15,6 +15,9 @@ const errors = [];
 let errorPointer = 0;
 const serverStart = new Date().getTime();
 
+let _in = 0;
+let _out = 0;
+
 // configure express
 const app = express();
 const port = process.env.PORT || config.get("port");
@@ -66,10 +69,12 @@ function create() {
 // send a message to the hub
 function send(message) {
     return new Promise((resolve, reject) => {
+        _in++;
         const start = new Date().getTime();
         service.sendTopicMessage("MyTopic", {
             body: message
         }, err => {
+            _out++;
             const end = new Date().getTime();
             if (!err) {
                 const duration = end - start;
@@ -159,6 +164,8 @@ create().then(_ => {
         const buckets = latency.calc();
         res.send({
             queued: messages.length,
+            in: _in,
+            out: _out,
             concurrency: concurrency,
             errors: errors.length,
             last: errors.slice(errors.length - 10),

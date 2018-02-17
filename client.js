@@ -63,6 +63,7 @@ if (status) {
             if (!err && response.statusCode >= 200 && response.statusCode <= 299) {
                 console.log("===== status =====");
                 console.log(`queued: ${body.queued}`);
+                console.log(`in / out: ${body.in} / ${body.out}`);
                 console.log(`concurrency: ${body.concurrency}`);
                 console.log(`errors: ${body.errors}`);
                 for (let bucket of body.latency) {
