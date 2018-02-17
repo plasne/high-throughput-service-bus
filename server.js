@@ -13,6 +13,7 @@ const latency = new Latency();
 let messages = [];
 const errors = [];
 let errorPointer = 0;
+let bad = 0;
 
 // configure express
 const app = express();
@@ -75,6 +76,7 @@ function send(message) {
                 latency.add(duration);
                 resolve();
             } else {
+                bad++;
                 reject(err);
             }
         });
@@ -158,6 +160,7 @@ create().then(_ => {
         res.send({
             queued: messages.length,
             concurrency: concurrency,
+            bad: bad,
             errors: errors.length,
             last: errors.slice(errors.length - 10),
             latency: buckets
