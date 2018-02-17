@@ -7,7 +7,7 @@ const express = require("express");
 
 const app = express();
 
-const scenario = "local"; //"appsrv/container";
+const scenario = "appsrv/container";
 const port = process.env.PORT || 8000;
 
 const retryOperations = new azure.ExponentialRetryPolicyFilter();
@@ -87,9 +87,10 @@ function create() {
 
 }
 
-// provide a space to record times
+// variables
 let latency = new Latency();
 let last = null;
+let lastError = null;
 
 create().then(_ => {
 
@@ -148,12 +149,17 @@ create().then(_ => {
     }, 60000 * 15); // every 15 minutes
 
 }).catch(err => {
+    lastError = err;
     console.error(err);
 });
 
 app.get("/latency", (req, res) => {
     const buckets = latency.calc();
     res.send(buckets);
+});
+
+app.get("/error", (req, res) => {
+    res.send(lastError);
 });
 
 app.get("/", (req, res) => {
