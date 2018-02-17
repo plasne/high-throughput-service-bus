@@ -17,11 +17,12 @@ cmd
 
 // variables
 const uri = cmd.uri || config.get("serviceUri");
-const produce = (cmd.status && !cmd.produce) ? false : true;
-const status = (cmd.produce && !cmd.status) ? false : true;
+console.log(`Service URI will be: ${uri}.`);
 const every = cmd.every || config.get("every");
 const count = cmd.count || config.get("count");
 const concurrency = cmd.max || config.get("concurrency");
+const produce = (cmd.status && !cmd.produce) ? false : true;
+const status = (cmd.produce && !cmd.status) ? false : true;
 if (produce) {
     console.log(`Produce ${count} messages every ${every}ms with ${concurrency} concurrency.`);
 }
@@ -62,9 +63,11 @@ if (status) {
             if (!err && response.statusCode >= 200 && response.statusCode <= 299) {
                 console.log("===== status =====");
                 console.log(`queued: ${body.queued}`);
+                console.log(`concurrency: ${body.concurrency}`);
                 console.log(`errors: ${body.errors}`);
                 for (let bucket of body.latency) {
-                    console.log(`${(bucket._range < 1) ? " " : ""}${(bucket._range * 100).toFixed(3)}%: ${bucket._count} written, ${bucket._avg}ms avg latency (${bucket._min} - ${bucket._max}).`);
+                    const latency = (bucket._avg) ? `, ${bucket._avg} ms avg latency (${bucket._min} - ${bucket._max})` : "";
+                    console.log(`${(bucket._range < 1) ? " " : ""}${(bucket._range * 100).toFixed(3)}%: ${bucket._count} written${latency}`);
                 }
             } else if (err) {
                 console.error(err);

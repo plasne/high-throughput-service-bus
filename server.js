@@ -75,7 +75,6 @@ function send(message) {
                 latency.add(duration);
                 resolve();
             } else {
-                errors.push(err);
                 reject(err);
             }
         });
@@ -93,6 +92,7 @@ function dispatch() {
             try {
                 await send(message);
             } catch (ex) {
+                errors.push(ex);
                 console.error(ex);
             }
 
@@ -157,6 +157,7 @@ create().then(_ => {
         const buckets = latency.calc();
         res.send({
             queued: messages.length,
+            concurrency: concurrency,
             errors: errors.length,
             last: errors.slice(errors.length - 10),
             latency: buckets
