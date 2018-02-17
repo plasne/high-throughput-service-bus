@@ -1,7 +1,8 @@
 FROM node:latest
+COPY lib/ lib/
+COPY config/ config/
 COPY server.js server.js
 COPY package.json package.json
-COPY lib/ lib/
 RUN npm install
 ENV PORT=80
 EXPOSE 80

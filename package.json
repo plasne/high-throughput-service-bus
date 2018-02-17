@@ -11,6 +11,8 @@
   "license": "ISC",
   "dependencies": {
     "azure": "^2.2.1-preview",
+    "commander": "^2.14.1",
+    "config": "^1.29.4",
     "express": "^4.16.2",
     "randomstring": "^1.1.5",
     "tedious": "^2.3.1"

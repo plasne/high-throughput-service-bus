@@ -1,107 +1,126 @@
 
+// includes
+const config  = require("config");
 const azure = require("azure");
 const randomstring = require("randomstring");
 const Latency = require("./lib/Latency.js");
-const tedious = require("tedious");
 const express = require("express");
+const async = require("async");
 
+// global variables
+let concurrency = config.get("concurrency");
+const latency = new Latency();
+let messages = [];
+const errors = [];
+let errorPointer = 0;
+
+// configure express
 const app = express();
+const port = process.env.PORT || config.get("port");
 
-const scenario = "appsrv/container";
-const port = process.env.PORT || 8000;
-
+// establish a connection to Azure Service Bus
 const retryOperations = new azure.ExponentialRetryPolicyFilter();
-const service = azure.createServiceBusService("Endpoint=sb://pelasne-servicebus.servicebus.windows.net/;SharedAccessKeyName=RootManageSharedAccessKey;SharedAccessKey=Un2Efi+ANsVtznBuVS5mqAj9MJs9JfM0uHBoL7S5v3M=").withFilter(retryOperations);
+const connectionString = config.get("connectionString");
+const service = azure.createServiceBusService(connectionString).withFilter(retryOperations);
 
-function write(query) {
+function isInt(a) {
+    return (typeof a==='number' && (a%1)===0);
+}
+
+// create topic / subscription
+function create() {
     return new Promise((resolve, reject) => {
 
-        // open a connection
-        const connection = new tedious.Connection({
-            userName: "plasne",
-            password: "Vampyr0000!!!!",
-            server: "pelasne-statsdb.database.windows.net",
-            options: {
-                encrypt: true,
-                database: "pelasne-stats"
+        // create the topic
+        const topicOptions = {
+            MaxSizeInMegabytes: '5120',
+            DefaultMessageTimeToLive: 'PT5S'
+        };
+        service.createTopicIfNotExists("MyTopic", topicOptions, err => {
+            if (!err) {
+
+                // create the subscription
+                service.getSubscription("MyTopic", "AllMessages", err => {
+                    if (!err) {
+                        resolve(); // already exists
+                    } else {
+                        service.createSubscription("MyTopic", "AllMessages", err => {
+                            if (!err) {
+                                resolve();
+                            } else {
+                                reject(err);
+                            }
+                        });
+                    }
+                });
+
+            } else {
+                reject(err);
             }
         });
-        
-        // write the query
-        connection.on("connect", err => {
-            const request = new tedious.Request(query, (err, count) => {
-                if (!err) {
-                    resolve();
-                } else {
-                    reject(err);
-                }
-            });
-            connection.execSql(request);
-        });
 
     });
 }
 
-function create() {
-    
-    // create the table
-    return write(`IF NOT EXISTS (
-        SELECT * FROM sys.tables t JOIN sys.schemas s ON (t.schema_id = s.schema_id)
-        WHERE s.name = 'dbo' AND t.name = 'log'
-    ) CREATE TABLE dbo.log (
-        scenario varchar(50) NOT NULL,
-        timestamp datetime2 NOT NULL, success int NOT NULL,
-        failure int NOT NULL, latency int NOT NULL
-    )`).then(_ => {
-        return new Promise((resolve, reject) => {
-
-            // create the topic
-            const topicOptions = {
-                MaxSizeInMegabytes: '5120',
-                DefaultMessageTimeToLive: 'PT5S'
-            };
-            service.createTopicIfNotExists("MyTopic", topicOptions, err => {
-                if (!err) {
-
-                    // create the subscription
-                    service.getSubscription("MyTopic", "AllMessages", err => {
-                        if (!err) {
-                            resolve(); // already exists
-                        } else {
-                            service.createSubscription("MyTopic", "AllMessages", err => {
-                                if (!err) {
-                                    resolve();
-                                } else {
-                                    reject(err);
-                                }
-                            });
-                        }
-                    });
-
-                } else {
-                    reject(err);
-                }
-            });
+// send a message to the hub
+function send(message) {
+    return new Promise((resolve, reject) => {
+        const start = new Date().getTime();
+        service.sendTopicMessage("MyTopic", {
+            body: message
+        }, err => {
+            const end = new Date().getTime();
+            if (!err) {
+                const duration = end - start;
+                latency.add(duration);
+                resolve();
+            } else {
+                errors.push(err);
+                reject(err);
+            }
         });
     });
-
 }
 
-// variables
-let latency = new Latency();
-let last = null;
-let lastError = null;
+// dispatch all messages
+function dispatch() {
+    if (messages.length > 0) {
 
+        // dispatch messages per concurrency
+        async.mapLimit(messages, concurrency, async message => {
+
+            // send the message
+            try {
+                await send(message);
+            } catch (ex) {
+                console.error(ex);
+            }
+
+        }, (err, results) => {
+            
+            // recur at next opportunity
+            messages = [];
+            setTimeout(dispatch, 0);
+
+        });
+
+    } else {
+
+        // recur at next opportunity
+        setTimeout(dispatch, 0);
+
+    }
+}
+
+// create and then put up interface
 create().then(_ => {
 
     // write a batch of messages
     app.post("/messages", (req, res) => {
-        const since = (last) ? new Date().getTime() - last : 1000;
-        let num = Math.ceil(since / 125);
-        num = (num > 200) ? 200 : num;
-        for (let i = 0; i < num; i++) {
 
-            // generate a fake message
+        // generate and queue a batch of messages
+        const count = req.query.count;
+        for (let i = 0; i < count; i++) {
             const msg = {
                 v0: randomstring.generate(171),
                 v1: randomstring.generate(164),
@@ -114,58 +133,50 @@ create().then(_ => {
                 v8: randomstring.generate(187),
                 v9: randomstring.generate(128)
             };
-            const body = JSON.stringify(msg);
-        
-            // send the message
-            const start = new Date().getTime();
-            service.sendTopicMessage("MyTopic", {
-                body: body
-            }, err => {
-                const end = new Date().getTime();
-                if (!err) {
-                    const duration = end - start;
-                    latency.add(duration);
-                    //console.log(`success after ${duration}ms.`);
-                } else {
-                    latency.fail();
-                    console.error(err);
-                }
-            });
-
+            messages.push(JSON.stringify(msg));
         }
-        last = new Date().getTime();
-        res.send(`wrote ${num}.`);
+
+        // change concurrency
+        const c = parseInt(req.query.concurrency, 10);
+        if (!Number.isNaN(c) && c !== concurrency) {
+            concurrency = c;
+            console.log(`concurrency changed to ${concurrency}.`);
+        }
+
+        // send a response
+        res.send({
+            msg: `adding ${count} to existing batch of ${messages.length}...`,
+            errors: errors.slice(errorPointer)
+        });
+        errorPointer = errors.length;
+
     });
 
-    // calculate results
-    setInterval(_ => {
+    // get status
+    app.get("/status", (req, res) => {
         const buckets = latency.calc();
-        const all = buckets[0];
-        write(`INSERT INTO dbo.log (scenario, timestamp, success, failure, latency) VALUES ('${scenario}', GetDate(), ${all.count}, ${all.fails}, ${all.avg});`);
-        for (let bucket of buckets) {
-            console.log(`bucket ${bucket.range}, success: ${bucket.count}, fails: ${bucket.fails}, min: ${bucket.min}ms, max: ${bucket.max}ms, avg: ${bucket.avg}ms`);
-        }
-        latency = new Latency();
-    }, 60000 * 15); // every 15 minutes
+        res.send({
+            queued: messages.length,
+            errors: errors.length,
+            last: errors.slice(errors.length - 10),
+            latency: buckets
+        });
+    });
+    
+    // redirect to status if nothing is specified
+    app.get("/", (req, res) => {
+        res.redirect("/status");
+    });
+
+    // start dispatching
+    setTimeout(dispatch, 0);
 
 }).catch(err => {
-    lastError = err;
+    errors.push(err);
     console.error(err);
 });
-
-app.get("/latency", (req, res) => {
-    const buckets = latency.calc();
-    res.send(buckets);
-});
-
-app.get("/error", (req, res) => {
-    res.send(lastError);
-});
-
-app.get("/", (req, res) => {
-    res.redirect("/latency");
-});
-
+   
+// start listening
 app.listen(port, _ => {
     console.log(`listening on port ${port}...`);
 });
