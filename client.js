@@ -4,7 +4,7 @@ const request = require("request");
 setInterval(_ => {
     request({
         method: "POST",
-        uri: "https://pelasne-nodeapp.azurewebsites.net/messages",
+        uri: "http://localhost:8000/messages",
         body: "default"
     }, (err, response, body) => {
         if (!err && response.statusCode >= 200 && response.statusCode <= 299) {
