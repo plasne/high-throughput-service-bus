@@ -1,3 +1,4 @@
+
 const azure = require("azure");
 const randomstring = require("randomstring");
 const Latency = require("./lib/Latency.js");
@@ -6,7 +7,7 @@ const express = require("express");
 
 const app = express();
 
-const scenario = "appsrv/container";
+const scenario = "local"; //"appsrv/container";
 const port = process.env.PORT || 8000;
 
 const retryOperations = new azure.ExponentialRetryPolicyFilter();
@@ -44,7 +45,7 @@ function write(query) {
 function create() {
     
     // create the table
-    return write(`DROP TABLE dbo.log; IF NOT EXISTS (
+    return write(`IF NOT EXISTS (
         SELECT * FROM sys.tables t JOIN sys.schemas s ON (t.schema_id = s.schema_id)
         WHERE s.name = 'dbo' AND t.name = 'log'
     ) CREATE TABLE dbo.log (
@@ -88,44 +89,52 @@ function create() {
 
 // provide a space to record times
 let latency = new Latency();
+let last = null;
 
 create().then(_ => {
 
-    // generate 10 messages per second
-    setInterval(_ => {
+    // write a batch of messages
+    app.post("/messages", (req, res) => {
+        const since = (last) ? new Date().getTime() - last : 1000;
+        let num = Math.ceil(since / 125);
+        num = (num > 200) ? 200 : num;
+        for (let i = 0; i < num; i++) {
+
+            // generate a fake message
+            const msg = {
+                v0: randomstring.generate(171),
+                v1: randomstring.generate(164),
+                v2: randomstring.generate(167),
+                v3: randomstring.generate(194),
+                v4: randomstring.generate(137),
+                v5: randomstring.generate(199),
+                v6: randomstring.generate(159),
+                v7: randomstring.generate(173),
+                v8: randomstring.generate(187),
+                v9: randomstring.generate(128)
+            };
+            const body = JSON.stringify(msg);
         
-        // generate a fake message
-        const msg = {
-            v0: randomstring.generate(171),
-            v1: randomstring.generate(164),
-            v2: randomstring.generate(167),
-            v3: randomstring.generate(194),
-            v4: randomstring.generate(137),
-            v5: randomstring.generate(199),
-            v6: randomstring.generate(159),
-            v7: randomstring.generate(173),
-            v8: randomstring.generate(187),
-            v9: randomstring.generate(128)
-        };
-        const body = JSON.stringify(msg);
+            // send the message
+            const start = new Date().getTime();
+            service.sendTopicMessage("MyTopic", {
+                body: body
+            }, err => {
+                const end = new Date().getTime();
+                if (!err) {
+                    const duration = end - start;
+                    latency.add(duration);
+                    //console.log(`success after ${duration}ms.`);
+                } else {
+                    latency.fail();
+                    console.error(err);
+                }
+            });
 
-        // send the message
-        const start = new Date().getTime();
-        service.sendTopicMessage("MyTopic", {
-            body: body
-        }, err => {
-            const end = new Date().getTime();
-            if (!err) {
-                const duration = end - start;
-                latency.add(duration);
-                //console.log(`success after ${duration}ms.`);
-            } else {
-                latency.fail();
-                console.error(err);
-            }
-        });
-
-    }, (1000 / 8)); // 8 per second
+        }
+        last = new Date().getTime();
+        res.send(`wrote ${num}.`);
+    });
 
     // calculate results
     setInterval(_ => {
