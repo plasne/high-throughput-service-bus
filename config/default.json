@@ -3,6 +3,6 @@
     "connectionString": "Endpoint=sb://pelasne-servicebus.servicebus.windows.net/;SharedAccessKeyName=RootManageSharedAccessKey;SharedAccessKey=Un2Efi+ANsVtznBuVS5mqAj9MJs9JfM0uHBoL7S5v3M=",
     "serviceUri": "https://pelasne-nodeapp.azurewebsites.net",
     "concurrency": 40,
-    "count": 8,
+    "count": 4,
     "every": 1000
 }
