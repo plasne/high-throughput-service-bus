@@ -10,7 +10,6 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
-    "async-parallel": "^1.2.3",
     "azure": "^2.2.1-preview",
     "commander": "^2.14.1",
     "config": "^1.29.4",
