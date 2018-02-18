@@ -63,9 +63,9 @@ if (status) {
             if (!err && response.statusCode >= 200 && response.statusCode <= 299) {
                 console.log("===== status =====");
                 console.log(`queued: ${body.queued}`);
-                console.log(`in / out: ${body.in} / ${body.out}`);
-                console.log(`concurrency: ${body.concurrency}`);
+                console.log(`inflight: ${body.inflight}`);
                 console.log(`errors: ${body.errors}`);
+                console.log(`concurrency: ${body.concurrency}`);
                 for (let bucket of body.latency) {
                     const latency = (bucket._avg) ? `, ${bucket._avg} ms avg latency (${bucket._min} - ${bucket._max})` : "";
                     console.log(`${(bucket._range < 1) ? " " : ""}${(bucket._range * 100).toFixed(3)}%: ${bucket._count} written${latency}`);

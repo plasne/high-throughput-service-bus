@@ -10,11 +10,11 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
+    "async-parallel": "^1.2.3",
     "azure": "^2.2.1-preview",
     "commander": "^2.14.1",
     "config": "^1.29.4",
     "express": "^4.16.2",
-    "randomstring": "^1.1.5",
-    "tedious": "^2.3.1"
+    "randomstring": "^1.1.5"
   }
 }

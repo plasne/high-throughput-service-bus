@@ -5,18 +5,15 @@ const azure = require("azure");
 const randomstring = require("randomstring");
 const Latency = require("./lib/Latency.js");
 const express = require("express");
-const async = require("async");
 
 // global variables
-let concurrency = config.get("concurrency");
 const latency = new Latency();
-let messages = [];
+const messages = [];
 const errors = [];
+let inflight = 0;
+let concurrency = config.get("concurrency");
 let errorPointer = 0;
 const serverStart = new Date().getTime();
-
-let _in = 0;
-let _out = 0;
 
 // configure express
 const app = express();
@@ -66,57 +63,40 @@ function create() {
     });
 }
 
-// send a message to the hub
+// send message to topic
 function send(message) {
     return new Promise((resolve, reject) => {
-        _in++;
         const start = new Date().getTime();
         service.sendTopicMessage("MyTopic", {
             body: message
         }, err => {
-            _out++;
             const end = new Date().getTime();
             if (!err) {
-                const duration = end - start;
-                latency.add(duration);
-                resolve();
+                resolve(end - start);
             } else {
-                console.log("heads up:");
                 reject(err);
             }
         });
+    })
+    .then(duration => {
+        latency.add(duration);
+    })
+    .catch(err => {
+        console.error(err);
+        errors.push(err);
     });
 }
 
-// dispatch all messages
+// dispatch some queued messages to the topic
 function dispatch() {
-    if (messages.length > 0) {
-
-        // dispatch messages per concurrency
-        async.mapLimit(messages, concurrency, async message => {
-
-            // send the message
-            try {
-                await send(message);
-            } catch (ex) {
-                errors.push(ex);
-                console.error(ex);
-            }
-
-        }, (err, results) => {
-            
-            // recur at next opportunity
-            messages = [];
-            setTimeout(dispatch, 0);
-
+    while (messages.length > 0 && inflight < concurrency) {
+        inflight++;
+        const message = messages.shift();
+        send(message).then(_ => {
+            inflight--;
         });
-
-    } else {
-
-        // recur at next opportunity
-        setTimeout(dispatch, 0);
-
     }
+    setTimeout(dispatch, 0);
 }
 
 // create and then put up interface
@@ -127,8 +107,11 @@ create().then(_ => {
 
         // generate and queue a batch of messages
         const count = req.query.count;
+        const queueLength = messages.length;
         for (let i = 0; i < count; i++) {
-            const msg = {
+
+            // generate the message
+            const msg = JSON.stringify({
                 v0: randomstring.generate(171),
                 v1: randomstring.generate(164),
                 v2: randomstring.generate(167),
@@ -139,8 +122,11 @@ create().then(_ => {
                 v7: randomstring.generate(173),
                 v8: randomstring.generate(187),
                 v9: randomstring.generate(128)
-            };
-            messages.push(JSON.stringify(msg));
+            });
+
+            // queue the message
+            messages.push(msg);
+
         }
 
         // change concurrency
@@ -152,7 +138,7 @@ create().then(_ => {
 
         // send a response
         res.send({
-            msg: `adding ${count} to existing batch of ${messages.length}...`,
+            msg: `adding ${count} to queue of ${queueLength} with ${inflight} inflight...`,
             errors: errors.slice(errorPointer)
         });
         errorPointer = errors.length;
@@ -164,10 +150,9 @@ create().then(_ => {
         const buckets = latency.calc();
         res.send({
             queued: messages.length,
-            in: _in,
-            out: _out,
-            concurrency: concurrency,
+            inflight: inflight,
             errors: errors.length,
+            concurrency: concurrency,
             last: errors.slice(errors.length - 10),
             latency: buckets
         });
