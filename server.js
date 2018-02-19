@@ -5,6 +5,7 @@ const azure = require("azure");
 const randomstring = require("randomstring");
 const Latency = require("./lib/Latency.js");
 const express = require("express");
+const keepalive = require("agentkeepalive");
 
 // global variables
 const latency = new Latency();
@@ -23,7 +24,14 @@ const port = process.env.PORT || config.get("port");
 const retryOperations = new azure.ExponentialRetryPolicyFilter();
 const connectionString = config.get("connectionString");
 const service = azure.createServiceBusService(connectionString).withFilter(retryOperations);
+const keepaliveAgent = new keepalive.HttpsAgent();
+keepaliveAgent.maxSockets = 40;
+keepaliveAgent.maxFreeSockets = 10;
+keepaliveAgent.timeout = 60000;
+keepaliveAgent.keepAliveTimeout = 300000;
+service.setAgent(keepaliveAgent);
 
+// is integer test
 function isInt(a) {
     return (typeof a==='number' && (a%1)===0);
 }
