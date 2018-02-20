@@ -18,19 +18,19 @@ Using a connection pool for the outbound connections to Service Bus was ultimate
 
 ### Connection Pool
 
-The following code snippet shows using [agentkeepalive](https://github.com/node-modules/agentkeepalive) to limit the number of connections to 40 and more importantly to keep a pool of at least 10 connections alive. This significantly reduces the opening/closing of connections and allows the SNAT work properly.
+The following code snippet shows using a custom HTTPS Agent to limit the number of connections to 40 and more importantly to keep a pool of at least 10 connections alive. This significantly reduces the opening/closing of connections and allows the SNAT work properly.
 
 ```node
+const https = require("https");
 const azure = require("azure");
-const keepalive = require("agentkeepalive");
 
 const service = azure.createServiceBusService(connectionString).withFilter(retryOperations);
-const keepaliveAgent = new keepalive.HttpsAgent();
-keepaliveAgent.maxSockets = 40;
-keepaliveAgent.maxFreeSockets = 10;
-keepaliveAgent.timeout = 60000;
-keepaliveAgent.keepAliveTimeout = 300000;
-service.setAgent(keepaliveAgent);
+const keepAliveAgent = new https.Agent({
+    keepAlive: true,
+    maxSockets: 40,
+    maxFreeSockets: 10
+});
+service.setAgent(keepAliveAgent);
 ```
 
 ### Queue / Dispatch
