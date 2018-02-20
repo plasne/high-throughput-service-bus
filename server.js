@@ -5,7 +5,7 @@ const azure = require("azure");
 const randomstring = require("randomstring");
 const Latency = require("./lib/Latency.js");
 const express = require("express");
-const https = require("https");
+const keepalive = require("agentkeepalive");
 
 // global variables
 const latency = new Latency();
@@ -24,11 +24,11 @@ const port = process.env.PORT || config.get("port");
 const retryOperations = new azure.ExponentialRetryPolicyFilter();
 const connectionString = config.get("connectionString");
 const service = azure.createServiceBusService(connectionString).withFilter(retryOperations);
-const keepAliveAgent = new https.Agent({
-    keepAlive: true,
-    maxSockets: 40,
-    maxFreeSockets: 10
-});
+const keepAliveAgent = new keepalive.HttpsAgent();
+keepAliveAgent.maxSockets = 40;
+keepAliveAgent.maxFreeSockets = 10;
+keepAliveAgent.timeout = 60000;
+keepAliveAgent.keepAliveTimeout = 300000;
 service.setAgent(keepAliveAgent);
 
 // is integer test
