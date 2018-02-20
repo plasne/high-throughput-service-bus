@@ -2,7 +2,7 @@
     "port": 8000,
     "connectionString": "Endpoint=sb://xxxx.servicebus.windows.net/;SharedAccessKeyName=xxxx;SharedAccessKey=xxxx",
     "serviceUri": "https://xxxx.azurewebsites.net",
-    "concurrency": 100,
+    "concurrency": 40,
     "count": 8,
     "every": 1000
 }
