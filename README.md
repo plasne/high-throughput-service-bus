@@ -200,15 +200,15 @@ Here are the test results after adding it:
 ```bash
 ===== status =====
 queued: 0
-inflight: 8
+inflight: 3
 errors: 0
 concurrency: 100
-100.000%: 2008 written, 1710 ms avg latency (1008 - 8157)
-99.990%: 2007 written, 1707 ms avg latency (1008 - 7712)
-99.900%: 2005 written, 1701 ms avg latency (1008 - 6697)
-99.000%: 1987 written, 1665 ms avg latency (1008 - 4988)
-95.000%: 1907 written, 1571 ms avg latency (1008 - 2590)
-90.000%: 1807 written, 1530 ms avg latency (1008 - 2051)
+100.000%: 3045 written, 97 ms avg latency (17 - 799)
+ 99.990%: 3044 written, 97 ms avg latency (17 - 741)
+ 99.900%: 3041 written, 97 ms avg latency (17 - 537)
+ 99.000%: 3014 written, 94 ms avg latency (17 - 338)
+ 95.000%: 2892 written, 89 ms avg latency (17 - 166)
+ 90.000%: 2740 written, 85 ms avg latency (17 - 145)
 ```
 
 ## Notification Hub
