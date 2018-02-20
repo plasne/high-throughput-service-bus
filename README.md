@@ -210,3 +210,7 @@ concurrency: 100
 95.000%: 1907 written, 1571 ms avg latency (1008 - 2590)
 90.000%: 1807 written, 1530 ms avg latency (1008 - 2051)
 ```
+
+## Notification Hub
+
+Notification Hub offers the same .setAgent() function and this fix works for it as well.
