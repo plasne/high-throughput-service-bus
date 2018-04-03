@@ -6,6 +6,7 @@ const randomstring = require("randomstring");
 const Latency = require("./lib/Latency.js");
 const express = require("express");
 const keepalive = require("agentkeepalive");
+const massive = require("massive");
 
 // global variables
 const latency = new Latency();
@@ -20,95 +21,154 @@ const serverStart = new Date().getTime();
 const app = express();
 const port = process.env.PORT || config.get("port");
 
-// establish a connection to Azure Service Bus
-const retryOperations = new azure.ExponentialRetryPolicyFilter();
-const connectionString = config.get("connectionString");
-const service = azure.createServiceBusService(connectionString).withFilter(retryOperations);
-const keepAliveAgent = new keepalive.HttpsAgent();
-keepAliveAgent.maxSockets = 40;
-keepAliveAgent.maxFreeSockets = 10;
-keepAliveAgent.timeout = 60000;
-keepAliveAgent.keepAliveTimeout = 300000;
-service.setAgent(keepAliveAgent);
+function connect_serviceBus() {
+    return new Promise((resolve, reject) => {
+        if (config.has("serviceBus")) {
 
-// is integer test
-function isInt(a) {
-    return (typeof a==='number' && (a%1)===0);
+            // establish a connection to Azure Service Bus
+            const retryOperations = new azure.ExponentialRetryPolicyFilter();
+            const connectionString = config.get("serviceBus");
+            const service = azure.createServiceBusService(connectionString).withFilter(retryOperations);
+            const keepAliveAgent = new keepalive.HttpsAgent();
+            keepAliveAgent.maxSockets = 40;
+            keepAliveAgent.maxFreeSockets = 10;
+            keepAliveAgent.freeSocketKeepAliveTimeout = 60000;
+            service.setAgent(keepAliveAgent);
+
+            // create the topic
+            const topicOptions = {
+                MaxSizeInMegabytes: '5120',
+                DefaultMessageTimeToLive: 'PT5S'
+            };
+            service.createTopicIfNotExists("MyTopic", topicOptions, err => {
+                if (!err) {
+
+                    // create the subscription
+                    service.getSubscription("MyTopic", "AllMessages", err => {
+                        if (!err) {
+                            resolve(); // already exists
+                        } else {
+                            service.createSubscription("MyTopic", "AllMessages", err => {
+                                if (!err) {
+                                    
+                                    // provide a send function
+                                    resolve(message => {
+                                        return new Promise((resolve, reject) => {
+                                            const start = new Date().getTime();
+                                            service.sendTopicMessage("MyTopic", {
+                                                body: message
+                                            }, err => {
+                                                const end = new Date().getTime();
+                                                if (!err) {
+                                                    resolve(end - start);
+                                                } else {
+                                                    reject(err);
+                                                }
+                                            });
+                                        })
+                                        .then(duration => {
+                                            latency.add(duration);
+                                        })
+                                        .catch(err => {
+                                            console.error(err);
+                                            errors.push(err);
+                                        });
+                                    });
+
+                                } else {
+                                    reject(err);
+                                }
+                            });
+                        }
+                    });
+
+                } else {
+                    reject(err);
+                }
+            });
+
+        } else {
+            // no serviceBus connection string
+            resolve();
+        }
+    });
 }
 
-// create topic / subscription
-function create() {
-    return new Promise((resolve, reject) => {
+function connect_postgres() {
+    if (config.has("postgresHost")) {
 
-        // create the topic
-        const topicOptions = {
-            MaxSizeInMegabytes: '5120',
-            DefaultMessageTimeToLive: 'PT5S'
-        };
-        service.createTopicIfNotExists("MyTopic", topicOptions, err => {
-            if (!err) {
+        // establish a connection to PostgreSQL
+        return massive({
+            host: config.get("postgresHost"),
+            port: 5432,
+            ssl: true,
+            database: "logs",
+            user: config.get("postgresUser"),
+            password: config.get("postgresPass"),
+            min: 1,
+            max: 10,
+            keepAlive: true,
+            idleTimeoutMillis: 200000
+        }).then(db => {
+            return db.query(`CREATE TABLE IF NOT EXISTS messages (
+                id SERIAL PRIMARY KEY,
+                msg varchar(4096)
+            );`).then(_ => {
+                return db.reload().then(_ => {
 
-                // create the subscription
-                service.getSubscription("MyTopic", "AllMessages", err => {
-                    if (!err) {
-                        resolve(); // already exists
-                    } else {
-                        service.createSubscription("MyTopic", "AllMessages", err => {
-                            if (!err) {
-                                resolve();
-                            } else {
-                                reject(err);
-                            }
+                    // provide a send function
+                    return (message => {
+                        const start = new Date().getTime();
+                        return db.messages.insert({
+                            msg: message
+                        })
+                        .then(_ => {
+                            const end = new Date().getTime();
+                            latency.add(end - start);
+                        })
+                        .catch(err => {
+                            console.error(err);
+                            errors.push(err);
                         });
-                    }
+                    });
+
                 });
-
-            } else {
-                reject(err);
-            }
+            });
+        }).catch(ex => {
+            console.error(ex);
         });
 
-    });
-}
-
-// send message to topic
-function send(message) {
-    return new Promise((resolve, reject) => {
-        const start = new Date().getTime();
-        service.sendTopicMessage("MyTopic", {
-            body: message
-        }, err => {
-            const end = new Date().getTime();
-            if (!err) {
-                resolve(end - start);
-            } else {
-                reject(err);
-            }
-        });
-    })
-    .then(duration => {
-        latency.add(duration);
-    })
-    .catch(err => {
-        console.error(err);
-        errors.push(err);
-    });
-}
-
-// dispatch some queued messages to the topic
-function dispatch() {
-    while (messages.length > 0 && inflight < concurrency) {
-        inflight++;
-        const message = messages.shift();
-        send(message).then(_ => {
-            inflight--;
-        });
+    } else {
+        // no postgres host
+        return Promise.resolve();
     }
-    setTimeout(dispatch, 0);
+}
+
+function connect() {
+    return Promise.all([ connect_serviceBus(), connect_postgres() ])
+    .then(results => {
+        return results.filter(r => r);
+    });
 }
 
 // create and then put up interface
-create().then(_ => {
+console.log("initializing...");
+connect().then(sendFuncs => {
+    console.log("waiting...");
+
+    // dispatch some queued messages to the topic
+    function dispatch() {
+        while (messages.length > 0 && inflight < concurrency) {
+            const message = messages.shift();
+            for (let sendFunc of sendFuncs) {
+                inflight++;
+                sendFunc(message).then(_ => {
+                    inflight--;
+                });
+            }
+        }
+        setTimeout(dispatch, 0);
+    }
 
     // write a batch of messages
     app.post("/messages", (req, res) => {
