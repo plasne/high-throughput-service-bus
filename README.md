@@ -214,3 +214,49 @@ concurrency: 100
 ## Notification Hub
 
 Notification Hub offers the same .setAgent() function and this fix works for it as well.
+
+## AgentKeepAlive vs. Node HTTP KeepAlive
+
+The key difference I noticed is that AgentKeepAlive has more properties that allow you to control the behavior. While Node's KeepAlive allows you to specify when to send the keepalive packet after the last data packet, it seems to hold the connection for a full 2 minutes from that point; whereas AgentKeepAlive allows you to specify a timeout at which point the connection is released.
+
+## Viewing Open Connections
+
+The following syntax is for macOS, though you could do similar with versions of Linux.
+
+After starting server.js, you should find the PID of the process:
+
+```bash
+ps -a | grep node
+```
+
+Using the appropriate PID you can then see the IPv4 TCP/IP connections via:
+
+```bash
+lsof -i 4tcp -P | grep <pid>
+```
+
+The output should be something like this:
+
+```bash
+node      54562 plasne   15u  IPv6 0xf270ae1873b6c337      0t0  TCP *:8080 (LISTEN)
+node      54562 plasne   16u  IPv4 0xf270ae183e8490df      0t0  TCP 192.168.11.42:61443->40.121.158.30:5432 (ESTABLISHED)
+node      54562 plasne   17u  IPv4 0xf270ae185fd704bf      0t0  TCP 192.168.11.42:61453->40.121.158.30:5432 (ESTABLISHED)
+node      54562 plasne   18u  IPv4 0xf270ae183d6544bf      0t0  TCP 192.168.11.42:61454->40.121.158.30:5432 (ESTABLISHED)
+node      54562 plasne   19u  IPv4 0xf270ae183b0800df      0t0  TCP 192.168.11.42:61465->40.121.158.30:5432 (ESTABLISHED)
+node      54562 plasne   20u  IPv4 0xf270ae186897ab5f      0t0  TCP 192.168.11.42:61467->40.121.158.30:5432 (ESTABLISHED)
+node      54562 plasne   21u  IPv4 0xf270ae184a27e77f      0t0  TCP 192.168.11.42:61461->40.121.158.30:5432 (ESTABLISHED)
+node      54562 plasne   22u  IPv4 0xf270ae183d7784bf      0t0  TCP 192.168.11.42:61463->40.121.158.30:5432 (ESTABLISHED)
+node      54562 plasne   23u  IPv4 0xf270ae1868871e1f      0t0  TCP 192.168.11.42:61462->40.121.158.30:5432 (ESTABLISHED)
+node      54562 plasne   24u  IPv4 0xf270ae1868d77e1f      0t0  TCP 192.168.11.42:61464->40.121.158.30:5432 (ESTABLISHED)
+node      54562 plasne   25u  IPv4 0xf270ae186eafa77f      0t0  TCP 192.168.11.42:61468->40.121.158.30:5432 (ESTABLISHED)
+```
+
+## PostgreSQL Integration
+
+An optional feature was added to write the message data to PostgreSQL so that connection pooling could be tested for that as well.
+
+In the config/default.json file, you can specify the values for "postgresHost", "postgresUser", and "postgresPass" if you want to write the messages to PostgrSQL. If you do not want to use PostgreSQL, you must rename or remove the "postgresHost" node.
+
+If you only want to test PostgreSQL, you can rename or remove the "serviceBus" node.
+
+The PostgreSQL must have a database named "log". This implementation uses Massive.js because that is what the customer I was testing for used.
