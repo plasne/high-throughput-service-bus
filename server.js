@@ -162,7 +162,7 @@ connect().then(sendFuncs => {
             const message = messages.shift();
             for (let sendFunc of sendFuncs) {
                 inflight++;
-                sendFunc(message).then(_ => {
+                sendFunc(message).finally(_ => {
                     inflight--;
                 });
             }
