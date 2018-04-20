@@ -260,3 +260,18 @@ In the config/default.json file, you can specify the values for "postgresHost", 
 If you only want to test PostgreSQL, you can rename or remove the "serviceBus" node.
 
 The PostgreSQL must have a database named "log". This implementation uses Massive.js because that is what the customer I was testing for used.
+
+## Cosmos
+
+You can override the agent for Cosmos by doing the following:
+
+```javascript
+const docDbClient = new DocumentDBClient(config.host, {
+    masterKey: config.authKey
+});
+const keepAliveAgent = new keepalive.HttpsAgent();
+keepAliveAgent.maxSockets = 40;
+keepAliveAgent.maxFreeSockets = 10;
+keepAliveAgent.freeSocketKeepAliveTimeout = 60000;
+docDbClient.requestAgent = keepAliveAgent;
+```
